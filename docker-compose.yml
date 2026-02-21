@@ -1,0 +1,50 @@
+name: ci-cd-lab
+
+services:
+  # 1. Source Control: Gitea
+  gitea:
+    image: gitea/gitea:latest
+    container_name: lab-gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    restart: always
+    networks:
+      - cicd-net
+    volumes:
+      - ./gitea-data:/data
+    ports:
+      - "3000:3000"
+      - "222:22"
+
+  # 2. CI/CD Server: Jenkins
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: lab-jenkins
+    user: root # NOTE: This is a hack for local labs so Jenkins can use the host's Docker socket. In real production, you use specific Docker-in-Docker setups or distinct worker nodes.
+    restart: always
+    networks:
+      - cicd-net
+    volumes:
+      - ./jenkins-data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock # Allows Jenkins to build Docker images
+      - /usr/bin/docker:/usr/bin/docker # Maps the docker CLI from your Linux host
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+
+  # 3. Artifact Storage: Local Docker Registry
+  registry:
+    image: registry:2
+    container_name: lab-registry
+    restart: always
+    networks:
+      - cicd-net
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./registry-data:/var/lib/registry
+
+networks:
+  cicd-net:
+    driver: bridge
