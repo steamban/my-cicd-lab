@@ -2,7 +2,7 @@
 FROM golang:1.26.0-alpine as builder
 WORKDIR /app
 COPY main.go .
-RUN RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o myapp main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o myapp main.go
 
 # -------------------------------------------------------------------------------------
 
