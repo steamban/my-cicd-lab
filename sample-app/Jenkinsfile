@@ -1,20 +1,17 @@
 pipeline {
-    // 'agent any' tells Jenkins to run this on any available executor
     agent any 
     
     environment {
-        // We use localhost:5000 because Jenkins is using your host's Docker daemon
         REGISTRY = "localhost:5000"
         IMAGE_NAME = "sample-app"
-        // BUILD_NUMBER is a built-in Jenkins variable (1, 2, 3, etc.)
-        // This ensures every build creates a uniquely versioned, immutable artifact
         IMAGE_TAG = "v1.0.${env.BUILD_NUMBER}" 
+        // We define the name of our running production container here
+        PROD_CONTAINER_NAME = "sample-app-prod"
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                // This pulls the code from the Git repo configured in the Jenkins job
                 checkout scm 
             }
         }
@@ -23,11 +20,7 @@ pipeline {
             steps {
                 script {
                     echo "🔨 Building Image: ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                    
-                    // Build the multi-stage Dockerfile
                     sh "docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ."
-                    
-                    // Also tag it as 'latest' for convenience
                     sh "docker tag ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:latest"
                 }
             }
@@ -36,11 +29,26 @@ pipeline {
         stage('Push to Registry') {
             steps {
                 script {
-                    echo "🚀 Pushing Artifacts to Local Registry..."
-                    
-                    // Push the uniquely tagged image and the latest tag
+                    echo "📦 Pushing Artifacts to Local Registry..."
                     sh "docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
                     sh "docker push ${REGISTRY}/${IMAGE_NAME}:latest"
+                }
+            }
+        }
+
+        stage('Deploy to Production') {
+            steps {
+                script {
+                    echo "🚀 Deploying ${IMAGE_TAG} to Production..."
+                    
+                    // 1. Stop the old container (|| true prevents the pipeline from failing on the very first run when no container exists)
+                    sh "docker stop ${PROD_CONTAINER_NAME} || true"
+                    
+                    // 2. Remove the old container
+                    sh "docker rm ${PROD_CONTAINER_NAME} || true"
+                    
+                    // 3. Start the new container, mapping port 8081 to your laptop
+                    sh "docker run -d --name ${PROD_CONTAINER_NAME} -p 8081:8081 ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
                 }
             }
         }
@@ -48,9 +56,7 @@ pipeline {
     
     post {
         always {
-            // Clean up the Jenkins workspace so we don't run out of disk space
             cleanWs()
-            // Optional: Clean up local docker images on the host to save space
             sh "docker rmi ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} || true"
             sh "docker rmi ${REGISTRY}/${IMAGE_NAME}:latest || true"
         }
